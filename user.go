@@ -2,17 +2,15 @@ package main
 
 import (
 	"errors"
+	"sync"
 	"time"
 )
 
 type User struct {
+	mu       sync.RWMutex
 	name     string
 	limit    int
 	Requests []time.Time
-}
-
-func (u *User) updateReq() []time.Time {
-	return u.Requests[1:]
 }
 
 func (u *User) canMakeReq() bool {
@@ -20,18 +18,22 @@ func (u *User) canMakeReq() bool {
 		return true
 	}
 	if time.Since(u.Requests[0]) > time.Second*60 {
-		u.Requests = u.updateReq()
-		return u.canMakeReq()
-	} else {
-		if len(u.Requests) >= u.limit {
-			return false
-		} else {
-			return true
+		for len(u.Requests) > 0 && time.Since(u.Requests[0]) > time.Second*60 {
+			u.Requests = u.Requests[1:]
 		}
+
 	}
+	if len(u.Requests) >= u.limit {
+		return false
+	} else {
+		return true
+	}
+
 }
 
 func (u *User) addRequest() error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
 	temp := u.canMakeReq()
 	if temp {
 		u.Requests = append(u.Requests, time.Now())
